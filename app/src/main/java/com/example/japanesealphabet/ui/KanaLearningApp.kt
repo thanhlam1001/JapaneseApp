@@ -5,6 +5,8 @@
 
 package com.example.japanesealphabet.ui
 
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -24,6 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.RecordVoiceOver
 import androidx.compose.material.icons.rounded.School
 import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material3.AssistChip
@@ -38,17 +41,20 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -58,10 +64,11 @@ import com.example.japanesealphabet.data.KanaItem
 import com.example.japanesealphabet.data.KanaRepository
 import com.example.japanesealphabet.data.KanaScript
 import com.example.japanesealphabet.ui.theme.JapaneseAlphabetTheme
+import java.util.Locale
 import kotlin.random.Random
 
 private enum class LearningMode(val label: String) {
-    STUDY("Hoc the"),
+    STUDY("Study cards"),
     QUIZ("Quiz")
 }
 
@@ -75,6 +82,7 @@ fun KanaLearningApp() {
     var selectedScript by rememberSaveable { mutableStateOf(KanaScript.HIRAGANA) }
     var selectedCategory by rememberSaveable { mutableStateOf(KanaCategory.BASIC) }
     var learningMode by rememberSaveable { mutableStateOf(LearningMode.STUDY) }
+    val speakerState = rememberKanaSpeaker()
 
     val availableCategories = remember(selectedScript) {
         KanaRepository.availableCategories(selectedScript)
@@ -109,7 +117,8 @@ fun KanaLearningApp() {
                 HeaderCard(
                     selectedScript = selectedScript,
                     selectedCategory = selectedCategory,
-                    total = kanaList.size
+                    total = kanaList.size,
+                    pronunciationReady = speakerState.isReady
                 )
             }
             item {
@@ -139,7 +148,11 @@ fun KanaLearningApp() {
             }
             item {
                 if (learningMode == LearningMode.STUDY) {
-                    StudySection(kanaList = kanaList)
+                    StudySection(
+                        kanaList = kanaList,
+                        pronunciationReady = speakerState.isReady,
+                        onPronounce = { speakerState.speak(it.symbol) }
+                    )
                 } else {
                     QuizSection(kanaList = kanaList)
                 }
@@ -151,11 +164,66 @@ fun KanaLearningApp() {
     }
 }
 
+private data class KanaSpeakerState(
+    val isReady: Boolean,
+    val speak: (String) -> Unit
+)
+
+@Composable
+private fun rememberKanaSpeaker(): KanaSpeakerState {
+    val context = LocalContext.current
+    var tts by remember { mutableStateOf<TextToSpeech?>(null) }
+    var isReady by remember { mutableStateOf(false) }
+    val latestReadyState by rememberUpdatedState(isReady)
+
+    DisposableEffect(context) {
+        var disposed = false
+        var engine: TextToSpeech? = null
+        engine = TextToSpeech(context) { status ->
+            if (!disposed && status == TextToSpeech.SUCCESS) {
+                val languageResult = engine?.setLanguage(Locale.JAPAN) ?: TextToSpeech.LANG_NOT_SUPPORTED
+                isReady = languageResult != TextToSpeech.LANG_MISSING_DATA &&
+                    languageResult != TextToSpeech.LANG_NOT_SUPPORTED
+                if (isReady) {
+                    engine?.setPitch(1.0f)
+                    engine?.setSpeechRate(0.9f)
+                    engine?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                        override fun onStart(utteranceId: String?) = Unit
+                        override fun onDone(utteranceId: String?) = Unit
+                        @Deprecated("Deprecated in Java")
+                        override fun onError(utteranceId: String?) = Unit
+                    })
+                }
+            } else if (!disposed) {
+                isReady = false
+            }
+        }
+        tts = engine
+
+        onDispose {
+            disposed = true
+            tts = null
+            engine?.stop()
+            engine?.shutdown()
+        }
+    }
+
+    return KanaSpeakerState(
+        isReady = isReady,
+        speak = { text ->
+            if (latestReadyState) {
+                tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "kana-$text")
+            }
+        }
+    )
+}
+
 @Composable
 private fun HeaderCard(
     selectedScript: KanaScript,
     selectedCategory: KanaCategory,
-    total: Int
+    total: Int,
+    pronunciationReady: Boolean
 ) {
     Card(
         modifier = Modifier
@@ -180,7 +248,7 @@ private fun HeaderCard(
                     modifier = Modifier.size(28.dp)
                 )
                 Text(
-                    text = "Hoc bang chu cai Nhat tung nhom",
+                    text = "Learn Japanese kana by group",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
@@ -193,9 +261,12 @@ private fun HeaderCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                AssistChip(onClick = { }, label = { Text("$total muc") })
+                AssistChip(onClick = { }, label = { Text("$total cards") })
                 AssistChip(onClick = { }, label = { Text(selectedCategory.title) })
-                AssistChip(onClick = { }, label = { Text("Hoc + Quiz") })
+                AssistChip(
+                    onClick = { },
+                    label = { Text(if (pronunciationReady) "Pronunciation ready" else "Pronunciation unavailable") }
+                )
             }
         }
     }
@@ -208,7 +279,7 @@ private fun ScriptSelector(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
-            text = "Chon bo chu",
+            text = "Choose script",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold
         )
@@ -241,7 +312,7 @@ private fun CategorySelector(
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
-            text = "Chon nhom hoc",
+            text = "Choose learning group",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold
         )
@@ -321,21 +392,21 @@ private fun StatsRow(
     ) {
         StatCard(
             modifier = Modifier.weight(1f),
-            label = "So the",
+            label = "Cards",
             value = kanaList.size.toString()
         )
         StatCard(
             modifier = Modifier.weight(1f),
-            label = "So hang",
+            label = "Rows",
             value = kanaList.map { it.row }.distinct().size.toString()
         )
         StatCard(
             modifier = Modifier.weight(1f),
-            label = "Nhom",
+            label = "Type",
             value = when (selectedCategory) {
-                KanaCategory.BASIC -> "Nen"
-                KanaCategory.DAKUTEN -> "Bien"
-                KanaCategory.YOUON -> "Ghep"
+                KanaCategory.BASIC -> "Core"
+                KanaCategory.DAKUTEN -> "Voice"
+                KanaCategory.YOUON -> "Blend"
             }
         )
     }
@@ -374,7 +445,11 @@ private fun StatCard(
 }
 
 @Composable
-private fun StudySection(kanaList: List<KanaItem>) {
+private fun StudySection(
+    kanaList: List<KanaItem>,
+    pronunciationReady: Boolean,
+    onPronounce: (KanaItem) -> Unit
+) {
     var currentIndex by rememberSaveable(kanaList) { mutableIntStateOf(0) }
     if (currentIndex > kanaList.lastIndex) currentIndex = 0
     val item = kanaList[currentIndex]
@@ -393,7 +468,7 @@ private fun StudySection(kanaList: List<KanaItem>) {
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "Ky tu ${currentIndex + 1}/${kanaList.size}",
+                    text = "Character ${currentIndex + 1}/${kanaList.size}",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -408,7 +483,7 @@ private fun StudySection(kanaList: List<KanaItem>) {
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
-                    text = "Hang ${item.row}",
+                    text = "Row ${item.row}",
                     style = MaterialTheme.typography.bodyLarge
                 )
                 Text(
@@ -416,6 +491,18 @@ private fun StudySection(kanaList: List<KanaItem>) {
                     style = MaterialTheme.typography.bodyLarge,
                     textAlign = TextAlign.Center
                 )
+                OutlinedButton(
+                    onClick = { onPronounce(item) },
+                    enabled = pronunciationReady,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.RecordVoiceOver,
+                        contentDescription = null
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (pronunciationReady) "Play pronunciation" else "Japanese TTS unavailable")
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -427,7 +514,7 @@ private fun StudySection(kanaList: List<KanaItem>) {
                         },
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("Lui")
+                        Text("Previous")
                     }
                     Button(
                         onClick = {
@@ -436,14 +523,14 @@ private fun StudySection(kanaList: List<KanaItem>) {
                         },
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("Tiep")
+                        Text("Next")
                     }
                 }
             }
         }
 
         Text(
-            text = "Tong quan nhanh",
+            text = "Quick overview",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold
         )
@@ -521,12 +608,12 @@ private fun QuizSection(kanaList: List<KanaItem>) {
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "Diem hien tai: $score",
+                    text = "Current score: $score",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "Chon ky tu dung voi romaji ben duoi.",
+                    text = "Choose the correct kana for the romaji below.",
                     style = MaterialTheme.typography.bodyLarge
                 )
             }
@@ -599,7 +686,7 @@ private fun QuizSection(kanaList: List<KanaItem>) {
                             style = MaterialTheme.typography.bodyLarge
                         )
                         Text(
-                            text = "Hang ${option.row}",
+                            text = "Row ${option.row}",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -621,7 +708,7 @@ private fun QuizSection(kanaList: List<KanaItem>) {
                 },
                 modifier = Modifier.weight(1f)
             ) {
-                Text("Lam moi")
+                Text("Reset")
             }
             Button(
                 onClick = {
@@ -636,7 +723,7 @@ private fun QuizSection(kanaList: List<KanaItem>) {
                 },
                 modifier = Modifier.weight(1f)
             ) {
-                Text(if (!answered) "Cham diem" else "Cau tiep")
+                Text(if (!answered) "Check answer" else "Next question")
             }
         }
 
@@ -653,9 +740,9 @@ private fun QuizSection(kanaList: List<KanaItem>) {
             ) {
                 Text(
                     text = if (correct) {
-                        "Chinh xac. ${question.prompt.symbol} doc la ${question.prompt.romaji}."
+                        "Correct. ${question.prompt.symbol} is pronounced ${question.prompt.romaji}."
                     } else {
-                        "Chua dung. Dap an la ${question.prompt.symbol} (${question.prompt.romaji})."
+                        "Not quite. The correct answer is ${question.prompt.symbol} (${question.prompt.romaji})."
                     },
                     modifier = Modifier.padding(18.dp),
                     style = MaterialTheme.typography.bodyLarge

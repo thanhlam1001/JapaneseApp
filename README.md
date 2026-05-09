@@ -1,43 +1,41 @@
 # Kana Master
 
-Ung dung Android de hoc bang chu cai Hiragana va Katakana bang Kotlin + Jetpack Compose.
+An Android app for learning Hiragana and Katakana with Kotlin and Jetpack Compose.
 
-## Tinh nang
+## Features
 
-- Chuyen doi giua `Hiragana` va `Katakana`
-- Hoc theo 3 nhom: `Co ban`, `Dakuten`, `Youon`
-- Hoc tung ky tu theo dang the
-- Xem toan bo danh sach ky tu de nhay nhanh
-- Quiz theo nhom dang hoc de luyen nho romaji va mat chu
-- Giao dien toi uu cho dien thoai
+- Switch between `Hiragana` and `Katakana`
+- Learn by 3 groups: `Basic`, `Dakuten`, and `Youon`
+- Study each kana as a flash card
+- Jump quickly through the full overview list
+- Quiz mode for the currently selected group
+- Built-in Japanese pronunciation using Android Text-to-Speech
+- Mobile-friendly interface
 
-## Cau truc
+## Structure
 
-- `app/src/main/java/com/example/japanesealphabet/data/KanaRepository.kt`: du lieu kana va phan nhom
-- `app/src/main/java/com/example/japanesealphabet/ui/KanaLearningApp.kt`: giao dien hoc, bo loc nhom va quiz
-- `app/src/main/java/com/example/japanesealphabet/MainActivity.kt`: diem vao app
+- `app/src/main/java/com/example/japanesealphabet/data/KanaRepository.kt`: kana data and learning groups
+- `app/src/main/java/com/example/japanesealphabet/ui/KanaLearningApp.kt`: study UI, filters, quiz, and pronunciation
+- `app/src/main/java/com/example/japanesealphabet/MainActivity.kt`: app entry point
 
-## Mo project
+## Open the project
 
-1. Mo thu muc nay bang Android Studio.
-2. Cho Gradle sync dependencies.
-3. Chay app tren emulator hoac may Android.
+1. Open the project folder in Android Studio, if available.
+2. Let Gradle sync dependencies.
+3. Run on an emulator or Android phone.
 
-## Cach build nhanh nhat neu may khong chay duoc Android Studio
+## Fastest build if your machine cannot run Android Studio
 
-Cach nhanh nhat la build tren GitHub Actions, khong can cai Android Studio, JDK hay Android SDK tren may.
+The fastest option is GitHub Actions. You do not need Android Studio, the JDK, or the Android SDK installed locally.
 
-1. Tao repo moi tren GitHub.
-2. Day toan bo thu muc project nay len repo do.
-3. Mo tab `Actions` tren GitHub.
-4. Chon workflow `Android Build`.
-5. Bam `Run workflow`.
-6. Doi workflow chay xong, tai file `app-debug-apk` ve.
-7. Giai nen artifact va lay file `app-debug.apk`.
+1. Create a new GitHub repository.
+2. Push this project to that repository.
+3. Open the `Actions` tab.
+4. Run the `Android Build` workflow.
+5. Download the `app-debug-apk` artifact after the workflow succeeds.
+6. Extract the artifact and install `app-debug.apk` on your Android device.
 
-Neu ban co dien thoai Android va da bat cho cai file APK tu nguon ngoai, ban co the copy `app-debug.apk` vao may va cai truc tiep.
+## Notes
 
-## Luu y
-
-- Workspace hien tai khong co `gradle` hay `gradlew`, nen chua the build/verify truc tiep trong terminal nay.
-- Neu ban muon, minh co the tiep tuc bo sung audio phat am, viet tay theo net, luu tien do hoc hoac flashcard ngau nhien.
+- This workspace does not currently include `gradle` or `gradlew`, so local build verification in this terminal is limited.
+- Japanese pronunciation depends on the Japanese TTS voice available on the target device.
